@@ -1,0 +1,162 @@
+---
+# Ansible playbook to deploy Rhythm app on localhost with custom ports
+- name: Deploy Rhythm App on Localhost (Ansible Demo)
+  hosts: localhost
+  connection: local
+  become: yes
+  vars:
+    app_dir: /tmp/rhythm-ansible-demo
+    mysql_root_password: Rhythm@2024Secure
+    mysql_user: rhythm_user
+    mysql_password: Rhythm@2024Secure
+    mysql_database: rhythm
+    
+  tasks:
+    - name: Check if Docker is installed
+      command: docker --version
+      register: docker_check
+      ignore_errors: yes
+      
+    - name: Install Docker if not present
+      block:
+        - name: Download Docker install script
+          get_url:
+            url: https://get.docker.com
+            dest: /tmp/get-docker.sh
+            mode: '0755'
+            
+        - name: Install Docker
+          command: sh /tmp/get-docker.sh
+          
+        - name: Start Docker service
+          service:
+            name: docker
+            state: started
+            enabled: yes
+            
+        - name: Add current user to docker group
+          user:
+            name: "{{ ansible_user_id }}"
+            groups: docker
+            append: yes
+      when: docker_check.rc != 0
+      
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+        
+    - name: Create application directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: '0755'
+        
+    - name: Copy docker-compose file
+      copy:
+        src: /mnt/c/Users/Shanu Pudi/Documents/3-1/Rhythm/docker-compose-ansible.yml
+        dest: "{{ app_dir }}/docker-compose.yml"
+        mode: '0644'
+        
+    - name: Copy backend code
+      synchronize:
+        src: /mnt/c/Users/Shanu Pudi/Documents/3-1/Rhythm/back/
+        dest: "{{ app_dir }}/back/"
+        delete: no
+        recursive: yes
+        
+    - name: Copy frontend code
+      synchronize:
+        src: /mnt/c/Users/Shanu Pudi/Documents/3-1/Rhythm/front/
+        dest: "{{ app_dir }}/front/"
+        delete: no
+        recursive: yes
+        
+    - name: Create backend .env file
+      copy:
+        content: |
+          SPRING_DATASOURCE_URL=jdbc:mysql://db-ansible:3306/{{ mysql_database }}
+          SPRING_DATASOURCE_USERNAME={{ mysql_user }}
+          SPRING_DATASOURCE_PASSWORD={{ mysql_password }}
+          SPRING_MAIL_HOST=smtp.gmail.com
+          SPRING_MAIL_PORT=587
+          JWT_SECRET=MySecretKey123456789012345678901234567890
+        dest: "{{ app_dir }}/back/.env"
+        mode: '0600'
+        
+    - name: Create frontend .env file
+      copy:
+        content: |
+          VITE_BASE_API_URL=http://localhost:9090
+        dest: "{{ app_dir }}/front/.env"
+        mode: '0644'
+        
+    - name: Create docker-compose .env file
+      copy:
+        content: |
+          MYSQL_ROOT_PASSWORD={{ mysql_root_password }}
+          MYSQL_DATABASE={{ mysql_database }}
+          MYSQL_USER={{ mysql_user }}
+          MYSQL_PASSWORD={{ mysql_password }}
+        dest: "{{ app_dir }}/.env"
+        mode: '0600'
+        
+    - name: Stop existing containers (if any)
+      shell: docker-compose down
+      args:
+        chdir: "{{ app_dir }}"
+      ignore_errors: yes
+      
+    - name: Build and start containers
+      shell: docker-compose up -d --build
+      args:
+        chdir: "{{ app_dir }}"
+      environment:
+        COMPOSE_PROJECT_NAME: rhythm-ansible
+        
+    - name: Wait for MySQL to be ready
+      wait_for:
+        host: localhost
+        port: 3308
+        delay: 10
+        timeout: 120
+        
+    - name: Wait for backend to be ready
+      wait_for:
+        host: localhost
+        port: 9090
+        delay: 15
+        timeout: 180
+        
+    - name: Wait for frontend to be ready
+      wait_for:
+        host: localhost
+        port: 3000
+        delay: 5
+        timeout: 60
+        
+    - name: Show running containers
+      shell: docker-compose ps
+      args:
+        chdir: "{{ app_dir }}"
+      register: containers_status
+      
+    - name: Display container status
+      debug:
+        var: containers_status.stdout_lines
+        
+    - name: Show deployment info
+      debug:
+        msg:
+          - "=========================================="
+          - "✅ Ansible Deployment Complete!"
+          - "=========================================="
+          - "Frontend:  http://localhost:3000"
+          - "Backend:   http://localhost:9090"
+          - "MySQL:     localhost:3308"
+          - "=========================================="
+          - "Check status: cd {{ app_dir }} && docker-compose ps"
+          - "View logs:    cd {{ app_dir }} && docker-compose logs -f"
+          - "Stop:         cd {{ app_dir }} && docker-compose down"
+          - "=========================================="

@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+back/target/
+back/.mvn/
+front/node_modules/
+front/dist/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+back/.env
+front/.env
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.jar
+*.war
+*.class
+dist/
+build/
+
+# Docker
+.dockerignore
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar
+
+# Temporary files
+*.tmp
+*.bak
+*.cache
+
+# Archives
+*.zip
+*.tar.gz

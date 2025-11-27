@@ -1,0 +1,69 @@
+---
+# Monitoring playbook to check application health
+- hosts: appservers
+  vars:
+    app_dir: /home/{{ ansible_user }}/rhythm
+    
+  tasks:
+    - name: Check Docker containers status
+      shell: docker-compose ps
+      args:
+        chdir: "{{ app_dir }}"
+      register: containers_status
+      ignore_errors: yes
+      
+    - name: Display containers status
+      debug:
+        var: containers_status.stdout_lines
+        
+    - name: Check frontend accessibility
+      uri:
+        url: http://localhost
+        status_code: 200
+        timeout: 5
+      register: frontend_check
+      ignore_errors: yes
+      
+    - name: Display frontend status
+      debug:
+        msg: "{{ 'Frontend: Available' if frontend_check.status == 200 else 'Frontend: Not accessible' }}"
+        
+    - name: Check backend accessibility
+      uri:
+        url: http://localhost:8081/user/1
+        status_code: 200
+        timeout: 5
+      register: backend_check
+      ignore_errors: yes
+      
+    - name: Display backend status
+      debug:
+        msg: "{{ 'Backend: Available' if backend_check.status == 200 else 'Backend: Not accessible' }}"
+        
+    - name: Get backend logs (last 20 lines)
+      shell: docker-compose logs --tail=20 backend
+      args:
+        chdir: "{{ app_dir }}"
+      register: backend_logs
+      ignore_errors: yes
+      
+    - name: Display backend logs
+      debug:
+        var: backend_logs.stdout_lines
+        
+    - name: Check disk usage
+      shell: df -h "{{ app_dir }}"
+      register: disk_usage
+      
+    - name: Display disk usage
+      debug:
+        var: disk_usage.stdout_lines
+        
+    - name: Check Docker disk usage
+      command: docker system df
+      register: docker_disk
+      ignore_errors: yes
+      
+    - name: Display Docker disk usage
+      debug:
+        var: docker_disk.stdout_lines

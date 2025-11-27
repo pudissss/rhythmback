@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network-ansible
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./back
+      dockerfile: Dockerfile
+    ports:
+      - "9090:8081"
+    environment:
+      - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL:-jdbc:mysql://db-ansible:3306/rhythm}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME:-rhythm_user}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD:-Rhythm@2024Secure}
+      - SPRING_MAIL_HOST=${SPRING_MAIL_HOST:-smtp.gmail.com}
+      - SPRING_MAIL_PORT=${SPRING_MAIL_PORT:-587}
+    depends_on:
+      - db-ansible
+    networks:
+      - app-network-ansible
+    restart: unless-stopped
+
+  db-ansible:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-Rhythm@2024Secure}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-rhythm}
+      - MYSQL_USER=${MYSQL_USER:-rhythm_user}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-Rhythm@2024Secure}
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql_data_ansible:/var/lib/mysql
+    networks:
+      - app-network-ansible
+    restart: unless-stopped
+
+networks:
+  app-network-ansible:
+    driver: bridge
+
+volumes:
+  mysql_data_ansible:

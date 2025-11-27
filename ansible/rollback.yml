@@ -1,0 +1,49 @@
+---
+# Rollback playbook to stop and remove containers
+- hosts: appservers
+  become: yes
+  vars:
+    app_dir: /home/{{ ansible_user }}/rhythm
+    
+  tasks:
+    - name: Check if application directory exists
+      stat:
+        path: "{{ app_dir }}"
+      register: app_dir_stat
+      
+    - name: Stop containers
+      shell: docker-compose down
+      args:
+        chdir: "{{ app_dir }}"
+      when: app_dir_stat.stat.exists
+      ignore_errors: yes
+      
+    - name: Remove containers and volumes
+      shell: docker-compose down -v
+      args:
+        chdir: "{{ app_dir }}"
+      when: app_dir_stat.stat.exists
+      ignore_errors: yes
+      
+    - name: Show Docker status
+      command: docker ps -a
+      register: docker_ps
+      
+    - name: Display containers
+      debug:
+        var: docker_ps.stdout_lines
+        
+    - name: Optional - Remove application directory
+      file:
+        path: "{{ app_dir }}"
+        state: absent
+      when: 
+        - app_dir_stat.stat.exists
+        - remove_app_dir is defined
+        - remove_app_dir | bool
+      
+    - name: Optional - Prune Docker system
+      shell: docker system prune -af
+      when:
+        - prune_docker is defined
+        - prune_docker | bool

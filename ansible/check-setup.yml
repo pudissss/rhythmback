@@ -1,0 +1,63 @@
+---
+# Simple check playbook to verify Ansible setup
+- hosts: appservers
+  gather_facts: yes
+  
+  tasks:
+    - name: Ping test
+      ping:
+      
+    - name: Check Python version
+      command: python3 --version
+      register: python_version
+      
+    - name: Display Python version
+      debug:
+        var: python_version.stdout
+        
+    - name: Check disk space
+      shell: df -h /
+      register: disk_space
+      
+    - name: Display disk space
+      debug:
+        var: disk_space.stdout_lines
+        
+    - name: Check memory
+      shell: free -h
+      register: memory
+      
+    - name: Display memory
+      debug:
+        var: memory.stdout_lines
+        
+    - name: Check if Docker is installed
+      command: docker --version
+      register: docker_version
+      ignore_errors: yes
+      
+    - name: Display Docker status
+      debug:
+        msg: "{{ 'Docker installed: ' + docker_version.stdout if docker_version.rc == 0 else 'Docker not installed' }}"
+        
+    - name: Check if docker-compose is installed
+      command: docker-compose --version
+      register: compose_version
+      ignore_errors: yes
+      
+    - name: Display Docker Compose status
+      debug:
+        msg: "{{ 'Docker Compose installed: ' + compose_version.stdout if compose_version.rc == 0 else 'Docker Compose not installed' }}"
+        
+    - name: Check sudo access
+      command: sudo -l
+      register: sudo_check
+      ignore_errors: yes
+      
+    - name: Display sudo status
+      debug:
+        msg: "{{ 'Sudo access: Available' if sudo_check.rc == 0 else 'Sudo access: Not available' }}"
+        
+    - name: Get OS information
+      debug:
+        msg: "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}, Architecture: {{ ansible_architecture }}"
