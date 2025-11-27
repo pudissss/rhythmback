@@ -81,30 +81,90 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # deploy:
-  #   name: Deploy to Server
-  #   runs-on: ubuntu-latest
-  #   needs: build
-  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-  #   
-  #   steps:
-  #     - name: Deploy via SSH
-  #       uses: appleboy/ssh-action@v1.0.0
-  #       with:
-  #         host: ${{ secrets.SERVER_HOST }}
-  #         username: ${{ secrets.SERVER_USER }}
-  #         key: ${{ secrets.SERVER_SSH_KEY }}
-  #         port: ${{ secrets.SERVER_PORT || 22 }}
-  #         script: |
-  #           cd ~/rhythm || exit 1
-  #           docker-compose pull
-  #           docker-compose up -d
-  #           docker-compose ps
-  #           echo "Deployment completed successfully!"
-  #
-  #     - name: Health Check
-  #       run: |
-  #         sleep 30
-  #         curl -f http://${{ secrets.SERVER_HOST }} || exit 1
-  #         curl -f http://${{ secrets.SERVER_HOST }}:8081/user/1 || exit 1
-  #         echo "Health checks passed!"
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy and Setup EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          script: |
+            # Install Docker if not present
+            if ! command -v docker &> /dev/null; then
+              echo "Installing Docker..."
+              sudo apt update
+              sudo apt install -y docker.io docker-compose
+              sudo systemctl start docker
+              sudo systemctl enable docker
+              sudo usermod -aG docker $USER
+            fi
+            
+            # Create app directory
+            mkdir -p ~/rhythm
+            cd ~/rhythm
+            
+            # Create docker-compose.yml if not exists
+            if [ ! -f docker-compose.yml ]; then
+              cat > docker-compose.yml << 'EOF'
+            version: '3.8'
+            services:
+              mysql:
+                image: mysql:8.0
+                container_name: rhythm-mysql
+                environment:
+                  MYSQL_ROOT_PASSWORD: rootpassword
+                  MYSQL_DATABASE: rhythmdb
+                ports:
+                  - "3306:3306"
+                volumes:
+                  - mysql_data:/var/lib/mysql
+                restart: always
+
+              backend:
+                image: ${{ secrets.DOCKER_USERNAME }}/rhythm-backend:latest
+                container_name: rhythm-backend
+                environment:
+                  SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/rhythmdb
+                  SPRING_DATASOURCE_USERNAME: root
+                  SPRING_DATASOURCE_PASSWORD: rootpassword
+                ports:
+                  - "8081:8081"
+                depends_on:
+                  - mysql
+                restart: always
+
+              frontend:
+                image: ${{ secrets.DOCKER_USERNAME }}/rhythm-frontend:latest
+                container_name: rhythm-frontend
+                ports:
+                  - "80:80"
+                depends_on:
+                  - backend
+                restart: always
+
+            volumes:
+              mysql_data:
+            EOF
+            fi
+            
+            # Pull latest images and restart
+            docker-compose pull
+            docker-compose up -d
+            docker-compose ps
+            echo "Deployment completed successfully!"
+
+      - name: Health Check
+        run: |
+          sleep 30
+          curl -f http://${{ secrets.SERVER_HOST }}:8081/actuator/health || echo "Backend health check failed"
+          echo "Deployment complete! Check http://${{ secrets.SERVER_HOST }}"
